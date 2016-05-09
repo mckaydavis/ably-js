@@ -1,7 +1,8 @@
 var ConnectionManager = (function() {
-	var getFromSession    = (typeof(SessionStorage) !== 'undefined' && SessionStorage.get);
-	var setInSession      = (typeof(SessionStorage) !== 'undefined' && SessionStorage.set);
-	var removeFromSession = (typeof(SessionStorage) !== 'undefined' && SessionStorage.remove);
+	var sessionStorageSupported = (typeof(SessionStorage) !== 'undefined' && SessionStorage.supported);
+	var getFromSession          = (typeof(SessionStorage) !== 'undefined' && SessionStorage.get);
+	var setInSession            = (typeof(SessionStorage) !== 'undefined' && SessionStorage.set);
+	var removeFromSession       = (typeof(SessionStorage) !== 'undefined' && SessionStorage.remove);
 	var sessionRecoveryName = 'ably-connection-recovery';
 	var actions = ProtocolMessage.Action;
 	var PendingMessage = Protocol.PendingMessage;
@@ -117,10 +118,10 @@ var ConnectionManager = (function() {
 		}
 
 		/* intercept close event in browser to persist connection id if requested */
-		if(setInSession && typeof options.recover === 'function' && window.addEventListener)
+		if(sessionStorageSupported && typeof options.recover === 'function' && window.addEventListener)
 			window.addEventListener('beforeunload', this.persistConnection.bind(this));
 
-		if(setInSession && options.closeOnUnload === true && window.addEventListener)
+		if(sessionStorageSupported && options.closeOnUnload === true && window.addEventListener)
 			window.addEventListener('beforeunload', function() { self.requestState({state: 'closing'})});
 
 		/* Listen for online and offline events */
@@ -173,7 +174,7 @@ var ConnectionManager = (function() {
 			}
 
 			var recoverFn = self.options.recover,
-				lastSessionData = getFromSession && getFromSession(sessionRecoveryName);
+				lastSessionData = getFromSession(sessionRecoveryName);
 			if(lastSessionData && typeof(recoverFn) === 'function') {
 				recoverFn(lastSessionData, function(shouldRecover) {
 					if(shouldRecover) {
@@ -617,7 +618,7 @@ var ConnectionManager = (function() {
 	 * state for later recovery. Only applicable in the browser context.
 	 */
 	ConnectionManager.prototype.persistConnection = function() {
-		if(setInSession) {
+		if(sessionStorageSupported) {
 			if(this.connectionKey && this.connectionSerial !== undefined) {
 				setInSession(sessionRecoveryName, {
 					recoveryKey: this.connectionKey + ':' + this.connectionSerial,
@@ -634,7 +635,7 @@ var ConnectionManager = (function() {
 	 * state for later recovery. Only applicable in the browser context.
 	 */
 	ConnectionManager.prototype.unpersistConnection = function() {
-		if(removeFromSession) {
+		if(sessionStorageSupported) {
 			removeFromSession(sessionRecoveryName);
 		}
 	};
