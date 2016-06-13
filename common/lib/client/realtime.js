@@ -92,11 +92,15 @@ var Realtime = (function() {
 	};
 
 	Channels.prototype.onceNopending = function(listener) {
-		if(Utils.isEmpty(this.inProgress)) {
+		if(this.hasNopending()) {
 			listener();
 			return;
 		}
 		this.once('nopending', listener);
+	};
+
+	Channels.prototype.hasNopending = function() {
+		return Utils.isEmpty(this.inProgress);
 	};
 
 	return Realtime;

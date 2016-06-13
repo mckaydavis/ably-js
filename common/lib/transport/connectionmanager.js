@@ -345,7 +345,7 @@ var ConnectionManager = (function() {
 			return;
 		}
 
-		this.realtime.channels.onceNopending(function(err) {
+		this.onceConnectionIdle(function(err) {
 			if(err) {
 				Logger.logAction(Logger.LOG_ERROR, 'ConnectionManager.scheduleTransportActivation()', 'Unable to activate transport; transport = ' + transport + '; err = ' + err);
 				return;
@@ -1259,6 +1259,25 @@ var ConnectionManager = (function() {
 	ConnectionManager.prototype.persistTransportPreferences = function(transport) {
 		if(Utils.arrIn(Defaults.upgradeTransports, transport.shortName)) {
 			setTransportPreference(transport.shortName);
+		}
+	};
+
+	ConnectionManager.prototype.onceConnectionIdle = function(listener) {
+		var channels = this.realtime.channels,
+			protocol = this.activeProtocol,
+			self = this,
+			tryAgain = function() {
+				self.onceConnectionIdle(listener);
+			};
+
+		if(channels.hasNopending) {
+			if(protocol.isIdle()) {
+				listener();
+			} else {
+				protocol.onceIdle(tryAgain);
+			}
+		} else {
+			channels.onceNopending(tryAgain);
 		}
 	};
 

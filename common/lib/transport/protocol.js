@@ -27,13 +27,16 @@ var Protocol = (function() {
 		this.messageQueue.completeMessages(serial, count, err);
 	};
 
+	Protocol.prototype.isIdle = function() {
+		return this.messageQueue.count() === 0;
+	}
+
 	Protocol.prototype.onceIdle = function(listener) {
-		var messageQueue = this.messageQueue;
-		if(messageQueue.count() === 0) {
+		if(this.isIdle()) {
 			listener();
 			return;
 		}
-		messageQueue.once('idle', listener);
+		this.messageQueue.once('idle', listener);
 	};
 
 	Protocol.prototype.send = function(pendingMessage, callback) {
