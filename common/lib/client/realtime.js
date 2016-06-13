@@ -51,8 +51,11 @@ var Realtime = (function() {
 	/* called when a transport becomes connected; reattempt attach()
 	 * for channels that may have been inProgress from a previous transport */
 	Channels.prototype.onTransportActive = function() {
-		for(var channelId in this.inProgress)
-			this.inProgress[channelId].checkPendingState();
+		for(var channelId in this.inProgress) {
+			if(this.inProgress[channelId] > 0) {
+				this.all[channelId].checkPendingState();
+			}
+		}
 	};
 
 	Channels.prototype.setSuspended = function(err) {
@@ -82,10 +85,11 @@ var Realtime = (function() {
 
 	Channels.prototype.setInProgress = function(channel, inProgress) {
 		if(inProgress) {
-			this.inProgress[channel.name] = channel;
+			this.inProgress[channel.name] = this.inProgress[channel.name] || 0;
+			this.inProgress[channel.name]++;
 		} else {
-			delete this.inProgress[channel.name];
-			if(Utils.isEmpty(this.inProgress)) {
+			this.inProgress[channel.name]--;
+			if(this.hasNopending) {
 				this.emit('nopending');
 			}
 		}
@@ -100,7 +104,9 @@ var Realtime = (function() {
 	};
 
 	Channels.prototype.hasNopending = function() {
-		return Utils.isEmpty(this.inProgress);
+		return Utils.arrEvery(Utils.valuesArray(this.inProgress, true), function(numLocks) {
+			return numLocks === 0;
+		});
 	};
 
 	return Realtime;
