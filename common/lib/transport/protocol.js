@@ -8,6 +8,15 @@ var Protocol = (function() {
 		var self = this;
 		transport.on('ack', function(serial, count) { self.onAck(serial, count); });
 		transport.on('nack', function(serial, count, err) { self.onNack(serial, count, err); });
+		Utils.arrForEach(['disconnected', 'closed', 'failed'], function(event) {
+			transport.on(event, function(error) {
+				/* Wait for nextTick to allow deactivateTransport to get and requeue
+				* any inprogress messages (if it wants) before we fail them */
+				Utils.nextTick(function() {
+					self.failAll(error || ConnectionError[event]);
+				});
+			});
+		});
 	}
 	Utils.inherits(Protocol, EventEmitter);
 
@@ -19,12 +28,16 @@ var Protocol = (function() {
 	Protocol.prototype.onNack = function(serial, count, err) {
 		Logger.logAction(Logger.LOG_ERROR, 'Protocol.onNack()', 'serial = ' + serial + '; count = ' + count + '; err = ' + Utils.inspectError(err));
 		if(!err) {
-			err = new Error('Unknown error');
-			err.statusCode = 500;
-			err.code = 50001;
-			err.message = 'Unable to send message; channel not responding';
+			err = new ErrorInfo('Unable to send message; channel not responding', 50001, 500);
 		}
 		this.messageQueue.completeMessages(serial, count, err);
+	};
+
+	Protocol.prototype.failAll = function(err) {
+		if(this.messageQueue.count() > 0) {
+			Logger.logAction(Logger.LOG_ERROR, 'Protocol.failAll()', 'Transport finished with messages in progress; err = ' + Utils.inspectError(err));
+			this.messageQueue.completeMessages(0, Number.MAX_SAFE_INTEGER, err);
+		}
 	};
 
 	Protocol.prototype.onceIdle = function(listener) {
@@ -52,6 +65,10 @@ var Protocol = (function() {
 
 	Protocol.prototype.getPendingMessages = function() {
 		return this.messageQueue.copyAll();
+	};
+
+	Protocol.prototype.clearPendingMessages = function() {
+		return this.messageQueue.clear();
 	};
 
 	Protocol.prototype.finish = function() {

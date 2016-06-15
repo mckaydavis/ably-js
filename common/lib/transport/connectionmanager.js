@@ -346,14 +346,17 @@ var ConnectionManager = (function() {
 		}
 
 		this.realtime.channels.onceNopending(function(err) {
+			var oldProtocol;
 			if(err) {
 				Logger.logAction(Logger.LOG_ERROR, 'ConnectionManager.scheduleTransportActivation()', 'Unable to activate transport; transport = ' + transport + '; err = ' + err);
 				return;
 			}
 
 			/* If currently connected, temporarily pause events until the sync is complete */
-			if(self.state === self.states.connected)
+			if(self.state === self.states.connected) {
 				self.state = self.states.synchronizing;
+				oldProtocol = self.activeProtocol;
+			}
 
 			/* make this the active transport */
 			Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Activating transport; transport = ' + transport);
@@ -365,20 +368,27 @@ var ConnectionManager = (function() {
 						Logger.logAction(Logger.LOG_ERROR, 'ConnectionManager.scheduleTransportActivation()', 'Unexpected error attempting to sync transport; transport = ' + transport + '; err = ' + err);
 						return;
 					}
-					Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'sync successful upgraded transport; transport = ' + transport + '; connectionSerial = ' + connectionSerial + '; connectionId = ' + connectionId);
+					Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'sync successful on upgraded transport; waiting for messages sent on old transport to complete before resuming sending. New transport = ' + transport + '; connectionSerial = ' + connectionSerial + '; connectionId = ' + connectionId);
 
-					Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Sending queued messages on upgraded transport; transport = ' + transport);
-					/* Restore pre-sync state. If state has changed in the meantime,
-					 * don't touch it -- since the websocket transport waits a tick before
-					 * disposing itself, it's possible for it to have happily synced
-					 * without err while, unknown to it, the connection has closed in the
-					 * meantime and the ws transport is scheduled for death */
-					if(self.state === self.states.synchronizing) {
-						self.state = self.states.connected;
-					}
-					if(self.state.sendEvents) {
-						self.sendQueuedMessages();
-					}
+					/* We wait for acknowledgement of messages sent on one transport
+					* before publishing a later message on another transport, to guarantee
+					* that messages arrive at realtime in the same order they are sent */
+					oldProtocol.onceIdle(function() {
+						/* Restore pre-sync state. If state has changed in the meantime,
+						 * don't touch it -- since the websocket transport waits a tick before
+						 * disposing itself, it's possible for it to have happily synced
+						 * without err while, unknown to it, the connection has closed in the
+						 * meantime and the ws transport is scheduled for death */
+						if(self.state === self.states.synchronizing) {
+							Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Pre-upgrade protocol idle, sending queued messages on upgraded transport; transport = ' + transport);
+							self.state = self.states.connected;
+						} else {
+							Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Pre-upgrade protocol idle, but state is now ' + self.state.state + ', so leaving unchanged');
+						}
+						if(self.state.sendEvents) {
+							self.sendQueuedMessages();
+						}
+					})
 				});
 			}
 		});
@@ -482,7 +492,10 @@ var ConnectionManager = (function() {
 			wasPending = Utils.arrDeleteValue(this.pendingTransports, transport);
 
 		if(wasActive) {
+			Logger.logAction(Logger.LOG_MICRO, 'ConnectionManager.deactivateTransport()', 'Getting, clearing, and requeuing ' + this.activeProtocol.messageQueue.count() + ' pending messages');
 			this.queuePendingMessages(this.activeProtocol.getPendingMessages());
+			/* Clear any messages we requeue so the protocol doesn't fail them */
+			this.activeProtocol.clearPendingMessages();
 			this.activeProtocol = this.host = null;
 		}
 
