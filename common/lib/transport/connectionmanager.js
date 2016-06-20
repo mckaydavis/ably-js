@@ -335,7 +335,26 @@ var ConnectionManager = (function() {
 
 		var self = this,
 			currentTransport = this.activeProtocol && this.activeProtocol.getTransport(),
-			shouldSync = (connectionId === this.connectionId);
+			shouldSync = (connectionId === this.connectionId),
+			startPauseEvents = function() {
+				/* If currently connected, temporarily pause events until the sync is complete */
+				if(self.state === self.states.connected)
+					self.state = self.states.synchronizing;
+				},
+			endPauseEvents = function() {
+				Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Sending queued messages on upgraded transport; transport = ' + transport);
+				/* Restore pre-sync state. If state has changed in the meantime,
+				 * don't touch it -- since the websocket transport waits a tick before
+				 * disposing itself, it's possible for it to have happily synced
+				 * without err while, unknown to it, the connection has closed in the
+				 * meantime and the ws transport is scheduled for death */
+				if(self.state === self.states.synchronizing) {
+					self.state = self.states.connected;
+				}
+				if(self.state.sendEvents) {
+					self.sendQueuedMessages();
+				}
+			};
 
 		Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Scheduling transport upgrade; transport = ' + transport);
 
@@ -352,35 +371,27 @@ var ConnectionManager = (function() {
 				return;
 			}
 
-			/* If currently connected, temporarily pause events until the sync is complete */
-			if(self.state === self.states.connected)
-				self.state = self.states.synchronizing;
+			startPauseEvents();
 
 			/* make this the active transport */
 			Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Activating transport; transport = ' + transport);
 			/* if activateTransport returns that it has not done anything (eg because the connection is closing), don't bother syncing */
 			if(self.activateTransport(error, transport, connectionKey, connectionSerial, connectionId, clientId)) {
-				Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Syncing transport; transport = ' + transport);
-				self.sync(transport, function(err, connectionSerial, connectionId) {
-					if(err) {
-						Logger.logAction(Logger.LOG_ERROR, 'ConnectionManager.scheduleTransportActivation()', 'Unexpected error attempting to sync transport; transport = ' + transport + '; err = ' + err);
-						return;
-					}
-					Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'sync successful upgraded transport; transport = ' + transport + '; connectionSerial = ' + connectionSerial + '; connectionId = ' + connectionId);
-
-					Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Sending queued messages on upgraded transport; transport = ' + transport);
-					/* Restore pre-sync state. If state has changed in the meantime,
-					 * don't touch it -- since the websocket transport waits a tick before
-					 * disposing itself, it's possible for it to have happily synced
-					 * without err while, unknown to it, the connection has closed in the
-					 * meantime and the ws transport is scheduled for death */
-					if(self.state === self.states.synchronizing) {
-						self.state = self.states.connected;
-					}
-					if(self.state.sendEvents) {
-						self.sendQueuedMessages();
-					}
-				});
+				if(shouldSync) {
+					Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Syncing transport; transport = ' + transport);
+					console.log("syncing")
+					self.sync(transport, function(err, connectionSerial, connectionId) {
+						if(err) {
+							Logger.logAction(Logger.LOG_ERROR, 'ConnectionManager.scheduleTransportActivation()', 'Unexpected error attempting to sync transport; transport = ' + transport + '; err = ' + err);
+							return;
+						}
+						Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'successful sync on upgraded transport; transport = ' + transport + '; connectionSerial = ' + connectionSerial + '; connectionId = ' + connectionId);
+						endPauseEvents();
+					});
+				} else {
+					Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Resuming events on upgrade transport without a sync due to failure to upgrade; transport = ' + transport + '; connectionSerial = ' + connectionSerial + '; connectionId = ' + connectionId);
+					endPauseEvents();
+				}
 			}
 		});
 	};
@@ -447,8 +458,17 @@ var ConnectionManager = (function() {
 
 		this.emit('transport.active', transport, connectionKey, transport.params);
 
-		/* notify the state change if previously not connected */
-		if(existingState !== this.states.connected) {
+		/* If previously not connected, notify the state change (including any
+		 * error).  If previously connected (ie upgrading), no state change, so
+		* emit any error as a standalone event */
+		if(existingState.state === this.states.connected.state) {
+			console.log("ALREADY CONNEctED OMG ERROR ", error)
+			if(error) {
+				this.emit('error', error);
+				/* if upgrading without error, leave any existing errorReason alone */
+				this.errorReason = this.realtime.connection.errorReason = error;
+			}
+		} else {
 			this.notifyState({state: 'connected', error: error});
 			this.errorReason = this.realtime.connection.errorReason = error || null;
 		}

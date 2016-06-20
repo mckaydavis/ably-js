@@ -2,6 +2,7 @@
 
 define(['ably', 'shared_helper'], function(Ably, helper) {
 	var exports = {},
+		_exports = {},
 		rest,
 		publishAtIntervals = function(numMessages, channel, dataFn, onPublish){
 			for(var i = numMessages; i > 0; i--) {
@@ -51,7 +52,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/*
 	 * Publish once with REST, before upgrade, verify message received
 	 */
-	exports.publishpreupgrade = function(test) {
+	_exports.publishpreupgrade = function(test) {
 		var transportOpts = {useBinaryProtocol: true};
 		test.expect(1);
 		try {
@@ -96,7 +97,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/*
 	 * Publish once with REST, after upgrade, verify message received on active transport
 	 */
-	exports.publishpostupgrade0 = function(test) {
+	_exports.publishpostupgrade0 = function(test) {
 		var transportOpts = {useBinaryProtocol: true};
 		test.expect(1);
 		try {
@@ -157,7 +158,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/*
 	 * Publish once with REST, after upgrade, verify message not received on inactive transport
 	 */
-	exports.publishpostupgrade1 = function(test) {
+	_exports.publishpostupgrade1 = function(test) {
 		var transportOpts = {useBinaryProtocol: true};
 		test.expect(1);
 		try {
@@ -221,7 +222,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/**
 	 * Publish and subscribe, text protocol
 	 */
-	exports.upgradepublish0 = function(test) {
+	_exports.upgradepublish0 = function(test) {
 		var count = 10;
 		var cbCount = 10;
 		var checkFinish = function() {
@@ -250,7 +251,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/**
 	 * Publish and subscribe, binary protocol
 	 */
-	exports.upgradepublish1 = function(test) {
+	_exports.upgradepublish1 = function(test) {
 		var count = 10;
 		var cbCount = 10;
 		var checkFinish = function() {
@@ -279,7 +280,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/*
 	 * Base upgrade case
 	 */
-	exports.upgradebase0 = function(test) {
+	_exports.upgradebase0 = function(test) {
 		var transportOpts = {useBinaryProtocol: true};
 		test.expect(2);
 		try {
@@ -319,7 +320,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/*
 	 * Check active heartbeat, text protocol
 	 */
-	exports.upgradeheartbeat0 = function(test) {
+	_exports.upgradeheartbeat0 = function(test) {
 		var transportOpts = {useBinaryProtocol: false};
 		test.expect(1);
 		try {
@@ -356,7 +357,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/*
 	 * Check active heartbeat, binary protocol
 	 */
-	exports.upgradeheartbeat1 = function(test) {
+	_exports.upgradeheartbeat1 = function(test) {
 		var transportOpts = {useBinaryProtocol: true};
 		test.expect(1);
 		try {
@@ -393,7 +394,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/*
 	 * Check heartbeat does not fire on inactive transport, text protocol
 	 */
-	exports.upgradeheartbeat2 = function(test) {
+	_exports.upgradeheartbeat2 = function(test) {
 		var transportOpts = {useBinaryProtocol: false};
 		test.expect(1);
 		try {
@@ -444,7 +445,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 	/*
 	 * Check heartbeat does not fire on inactive transport, binary protocol
 	 */
-	exports.upgradeheartbeat3 = function(test) {
+	_exports.upgradeheartbeat3 = function(test) {
 		var transportOpts = {useBinaryProtocol: true};
 		test.expect(1);
 		try {
@@ -488,6 +489,52 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 			monitorConnection(test, realtime);
 		} catch(e) {
 			test.ok(false, 'upgrade connect with key failed with exception: ' + e.stack);
+			closeAndFinish(test, realtime);
+		}
+	};
+
+	exports.unrecoverableUpgrade = function(test) {
+		test.expect(6);
+		var realtime,
+			fakeConnectionKey = 'aaaaa!aaaaaaaaaaaaaaaa-aaaaaaa';
+
+		try {
+			/* on base transport active */
+			realtime = helper.AblyRealtime({log: {level: 4}, tls: false, useTokenAuth: true});
+			realtime.connection.connectionManager.sync = function() {
+				console.log("NOOOOo")
+				test.ok(false, 'Should not be syncing a failed upgrade');
+			};
+			realtime.connection.connectionManager.once('transport.active', function(transport) {
+				console.log('base active ', transport.toString())
+				test.ok(transport.toString().indexOf('/comet/') > -1, 'assert first transport to become active is a comet transport');
+				test.equal(realtime.connection.errorReason, null, 'Check connection.errorReason is initially null');
+				/* sabotage the upgrade */
+				realtime.connection.connectionManager.connectionKey = fakeConnectionKey;
+
+				/* on upgrade failure */
+				realtime.connection.once('error', function(error) {
+					console.log('connection error ', error)
+					test.equal(error.code, 80008, 'Check correct (unrecoverable connection) error');
+					test.equal(realtime.connection.errorReason.code, 80008, 'Check error set in connection.errorReason');
+					test.equal(realtime.connection.state, 'connected', 'Check still connected');
+
+					/* Check events not still paused */
+					var channel = realtime.channels.get('unrecoverableUpgrade');
+					channel.attach(function(err) {
+						if(err) { test.ok(false, 'Attach error ' + helper.displayError(err)); }
+						channel.subscribe(function(msg) {
+							console.log("GOT A MSG")
+							test.ok(true, 'Successfully received message');
+							closeAndFinish(test, realtime);
+						});
+						channel.publish('msg', null);
+					console.log('connection state', realtime.connection.connectionManager.state)
+					});
+				});
+			});
+		} catch(e) {
+			test.ok(false, 'test failed with exception: ' + e.stack);
 			closeAndFinish(test, realtime);
 		}
 	};
