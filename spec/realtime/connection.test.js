@@ -2,6 +2,7 @@
 
 define(['ably', 'shared_helper'], function(Ably, helper) {
 	var exports = {},
+	_exports = {},
 		closeAndFinish = helper.closeAndFinish,
 		monitorConnection = helper.monitorConnection;
 
@@ -17,7 +18,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 		});
 	};
 
-	exports.connectionPing = function(test) {
+	_exports.connectionPing = function(test) {
 		test.expect(1);
 		var realtime;
 		try {
@@ -34,7 +35,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 		}
 	};
 
-	exports.connectionPingWithCallback = function(test) {
+	_exports.connectionPingWithCallback = function(test) {
 		test.expect(2);
 		var realtime;
 		try {
@@ -58,7 +59,7 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 		}
 	};
 
-	exports.connectionAttributes = function(test) {
+	_exports.connectionAttributes = function(test) {
 		test.expect(6);
 		var realtime;
 		try {
@@ -98,6 +99,26 @@ define(['ably', 'shared_helper'], function(Ably, helper) {
 				});
 			});
 			monitorConnection(test, realtime);
+		} catch(e) {
+			test.ok(false, 'test failed with exception: ' + e.stack);
+			closeAndFinish(test, realtime);
+		}
+	};
+
+	exports.unrecoverableConnection = function(test) {
+		test.expect(4);
+		var realtime,
+			fakeRecoveryKey = 'aaaaa!aaaaaaaaaaaaaaaa-aaaaaaa:5';
+		try {
+			realtime = helper.AblyRealtime({recover: fakeRecoveryKey});
+			realtime.connection.on('connected', function(stateChange) {
+				console.log(JSON.stringify(stateChange));
+				test.equal(stateChange.reason.code, 80008, "verify unrecoverable-connection error set in stateChange.reason");
+				test.equal(realtime.connection.errorReason.code, 80008, "verify unrecoverable-connection error set in connection.errorReason");
+				test.equal(realtime.connection.serial, -1, "verify serial is -1 (new connection), not 5");
+				test.equal(realtime.connection.key.indexOf('aaaaaaaaaaaaaaaa'), -1, "verify connection using a new connectionkey");
+				closeAndFinish(test, realtime);
+			});
 		} catch(e) {
 			test.ok(false, 'test failed with exception: ' + e.stack);
 			closeAndFinish(test, realtime);

@@ -4284,7 +4284,7 @@ var ConnectionManager = (function() {
 					self.scheduleTransportActivation(transport, connectionKey);
 				}
 			} else {
-				self.activateTransport(transport, connectionKey, connectionSerial, connectionId, clientId);
+				self.activateTransport(error, transport, connectionKey, connectionSerial, connectionId, clientId);
 
 				/* allow connectImpl to start the upgrade process if needed, but allow
 				 * other event handlers, including activating the transport, to run first */
@@ -4350,7 +4350,7 @@ var ConnectionManager = (function() {
 			/* make this the active transport */
 			Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Activating transport; transport = ' + transport);
 			/* if activateTransport returns that it has not done anything (eg because the connection is closing), don't bother syncing */
-			if(self.activateTransport(transport, connectionKey, self.connectionSerial, self.connectionId)) {
+			if(self.activateTransport(null, transport, connectionKey, self.connectionSerial, self.connectionId)) {
 				Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.scheduleTransportActivation()', 'Syncing transport; transport = ' + transport);
 				self.sync(transport, function(err, connectionSerial, connectionId) {
 					if(err) {
@@ -4385,8 +4385,11 @@ var ConnectionManager = (function() {
 	 * @param connectionSerial the current connectionSerial
 	 * @param connectionId the id of the new active connection
 	 */
-	ConnectionManager.prototype.activateTransport = function(transport, connectionKey, connectionSerial, connectionId, clientId) {
+	ConnectionManager.prototype.activateTransport = function(error, transport, connectionKey, connectionSerial, connectionId, clientId) {
 		Logger.logAction(Logger.LOG_MINOR, 'ConnectionManager.activateTransport()', 'transport = ' + transport);
+		if(error) {
+			Logger.logAction(Logger.LOG_ERROR, 'ConnectionManager.activateTransport()', 'Connection error: ' + error);
+		}
 		if(connectionKey)
 			Logger.logAction(Logger.LOG_MICRO, 'ConnectionManager.activateTransport()', 'connectionKey =  ' + connectionKey);
 		if(connectionSerial !== undefined)
@@ -4437,9 +4440,8 @@ var ConnectionManager = (function() {
 
 		/* notify the state change if previously not connected */
 		if(existingState !== this.states.connected) {
-			this.notifyState({state: 'connected'});
-			this.errorReason = null;
-			this.realtime.connection.errorReason = null;
+			this.notifyState({state: 'connected', error: error});
+			this.errorReason = this.realtime.connection.errorReason = error || null;
 		}
 
 		/* Gracefully terminate existing protocol */
@@ -5331,7 +5333,8 @@ var Transport = (function() {
 			break;
 		case actions.CONNECTED:
 			this.onConnect(message);
-			this.emit('connected', null, (message.connectionDetails ? message.connectionDetails.connectionKey : message.connectionKey), message.connectionSerial, message.connectionId, (message.connectionDetails ? message.connectionDetails.clientId : null));
+			console.log("transport ERROR", message)
+			this.emit('connected', message.error, (message.connectionDetails ? message.connectionDetails.connectionKey : message.connectionKey), message.connectionSerial, message.connectionId, (message.connectionDetails ? message.connectionDetails.clientId : null));
 			break;
 		case actions.CLOSED:
 			this.onClose(message);
