@@ -32,6 +32,8 @@ var PresenceMessage = (function() {
 			clientId: this.clientId,
 			/* Convert presence action back to an int for sending to Ably */
 			action: toActionValue(this.action),
+			connectionId: this.connectionId,
+			timestamp: this.timestamp,
 			encoding: this.encoding
 		};
 

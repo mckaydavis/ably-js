@@ -22,6 +22,7 @@ var Message = (function() {
 			clientId: this.clientId,
 			connectionId: this.connectionId,
 			connectionKey: this.connectionKey,
+			timestamp: this.timestamp,
 			encoding: this.encoding
 		};
 
