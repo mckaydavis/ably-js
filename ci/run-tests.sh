@@ -10,6 +10,11 @@ main() {
   /usr/bin/Xvfb $DISPLAY &
   echo "** Started xvfb"
 
+	echo "python:"
+	which python
+	whereis python
+	ls /usr/bin/python
+	echo $PYTHON
   npm rebuild
   "${ROOT}/test/bin/ci-nodeunit.sh"
 }
