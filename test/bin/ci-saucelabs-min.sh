@@ -9,8 +9,12 @@ NO_COLOUR="\033[0m"
 shopt -s xpg_echo
 
 echo "\n$GREEN -> Installing all dependencies $NO_COLOUR"
-npm config list
-npm config ls -l
+printenv | grep NODE
+npm config ls -l | grep production
+npm --version
+node --version
+which npm
+which node
 npm install
 npm install grunt-cli
 
