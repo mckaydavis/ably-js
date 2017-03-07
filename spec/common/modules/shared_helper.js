@@ -117,10 +117,13 @@ define(['spec/common/modules/testapp_module', 'spec/common/modules/client_module
 				exports[name + '_with_' + transport + '_binary_transport'] = testFn({transports: [transport], useBinaryProtocol: true});
 				exports[name + '_with_' + transport + '_text_transport'] = testFn({transports: [transport], useBinaryProtocol: false});
 			});
-			/* Plus one for no transport specified (ie use upgrade mechanism if present) */
+			/* Plus one for no transport specified (ie use upgrade mechanism if
+			 * present).  (we explicitly specify all transports since node only does
+			 * nodecomet+upgrade if comet is explicitly requested
+			 * */
 			if(!excludeUpgrade) {
-				exports[name + '_with_binary_transport'] = testFn({useBinaryProtocol: true});
-				exports[name + '_with_text_transport'] = testFn({useBinaryProtocol: false});
+				exports[name + '_with_binary_transport'] = testFn({transports: transports, useBinaryProtocol: true});
+				exports[name + '_with_text_transport'] = testFn({transports: transports, useBinaryProtocol: false});
 			}
 		}
 

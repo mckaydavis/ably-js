@@ -3538,11 +3538,12 @@ var Defaults = {
 	internetUpUrl: 'https://internet-up.ably-realtime.com/is-the-internet-up.txt',
 	jsonpInternetUpUrl: 'https://internet-up.ably-realtime.com/is-the-internet-up-0-9.js',
 	/* Order matters here: the base transport is the leftmost one in the
-	 * intersection of this list and the transports clientOption that's
+	 * intersection of baseTransportOrder and the transports clientOption that's
 	 * supported.  This is not quite the same as the preference order -- e.g.
 	 * xhr_polling is preferred to jsonp, but for browsers that support it we want
 	 * the base transport to be xhr_polling, not jsonp */
-	transports: ['xhr_polling', 'xhr_streaming', 'jsonp', 'web_socket'],
+	defaultTransports: ['xhr_polling', 'xhr_streaming', 'jsonp', 'web_socket'],
+	baseTransportOrder: ['xhr_polling', 'xhr_streaming', 'jsonp', 'web_socket'],
 	transportPreferenceOrder: ['jsonp', 'xhr_polling', 'xhr_streaming', 'web_socket'],
 	upgradeTransports: ['xhr_streaming', 'web_socket'],
 	minified: !(function _(){}).name
@@ -5792,12 +5793,12 @@ var ConnectionManager = (function() {
 		this.connectionKey = undefined;
 		this.connectionSerial = undefined;
 
-		this.transports = Utils.intersect((options.transports || Defaults.transports), ConnectionManager.supportedTransports);
-		/* baseTransports selects the leftmost transport in the Defaults.transports list
+		this.transports = Utils.intersect((options.transports || Defaults.defaultTransports), ConnectionManager.supportedTransports);
+		/* baseTransports selects the leftmost transport in the Defaults.baseTransportOrder list
 		* that's both requested and supported. Normally this will be xhr_polling;
 		* if xhr isn't supported it will be jsonp. If the user has forced a
 		* transport, it'll just be that one. */
-		this.baseTransport = Utils.intersect(Defaults.transports, this.transports)[0];
+		this.baseTransport = Utils.intersect(Defaults.baseTransportOrder, this.transports)[0];
 		this.upgradeTransports = Utils.intersect(this.transports, Defaults.upgradeTransports);
 		/* Map of hosts to an array of transports to not be tried for that host */
 		this.transportHostBlacklist = {};
@@ -5812,7 +5813,7 @@ var ConnectionManager = (function() {
 		this.mostRecentMsgId = null;
 
 		Logger.logAction(Logger.LOG_MINOR, 'Realtime.ConnectionManager()', 'started');
-		Logger.logAction(Logger.LOG_MICRO, 'Realtime.ConnectionManager()', 'requested transports = [' + (options.transports || Defaults.transports) + ']');
+		Logger.logAction(Logger.LOG_MICRO, 'Realtime.ConnectionManager()', 'requested transports = [' + (options.transports || Defaults.defaultTransports) + ']');
 		Logger.logAction(Logger.LOG_MICRO, 'Realtime.ConnectionManager()', 'available transports = [' + this.transports + ']');
 		Logger.logAction(Logger.LOG_MICRO, 'Realtime.ConnectionManager()', 'http hosts = [' + this.httpHosts + ']');
 
